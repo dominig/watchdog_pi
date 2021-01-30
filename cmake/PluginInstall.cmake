@@ -59,13 +59,13 @@ if(APPLE)
 
 endif(APPLE)
 
-if(UNIX AND NOT APPLE)
+if(UNIX AND NOT APPLE AND NOT QT_ANDROID)
     find_package(BZip2 REQUIRED)
     include_directories(${BZIP2_INCLUDE_DIR})
     find_package(ZLIB REQUIRED)
     include_directories(${ZLIB_INCLUDE_DIR})
     target_link_libraries(${PACKAGE_NAME} ${BZIP2_LIBRARIES} ${ZLIB_LIBRARY})
-endif(UNIX AND NOT APPLE)
+endif(UNIX AND NOT APPLE AND NOT QT_ANDROID)
 
 set(PARENT opencpn)
 
@@ -77,8 +77,7 @@ endif(NOT CMAKE_INSTALL_PREFIX)
 message(STATUS "${CMLOC}*** Will install to ${CMAKE_INSTALL_PREFIX}  ***")
 set(PREFIX_DATA share)
 set(PREFIX_PKGDATA ${PREFIX_DATA}/${PACKAGE_NAME})
-# set(PREFIX_LIB "${CMAKE_INSTALL_PREFIX}/${LIB_INSTALL_DIR}")
-set(PREFIX_LIB lib)
+set(PREFIX_LIB "${CMAKE_INSTALL_PREFIX}/${LIB_INSTALL_DIR}")
 
 if(WIN32)
     message(STATUS "${CMLOC}Install Prefix: ${CMAKE_INSTALL_PREFIX}")

@@ -5,7 +5,7 @@
 set(SAVE_CMLOC ${CMLOC})
 set(CMLOC "PluginSetup: ")
 
-if(NOT DEFINED GIT_REPOSITORY_SERVER)
+if(NOT DEFINED GIT_REPOSITORY_SERVER AND NOT ${USE_RPMBUILD})
     set(GIT_REPOSITORY_SERVER "github.com")
     message(STATUS "${CMLOC}GIT_REPOSITORY_SERVER not found setting to: ${GIT_REPOSITORY_SERVER}")
 endif()
@@ -31,19 +31,21 @@ message(STATUS "${CMLOC}OPCN_FLATPAK: ${OCPN_FLATPAK}")
 set(PKG_NVR ${PACKAGE_NAME}-${PROJECT_VERSION})
 set(PKG_URL "https://dl.cloudsmith.io/public/--pkg_repo--/raw/names/--name--/versions/--version--/--filename--")
 
-execute_process(
-    COMMAND git log -1 --format=%h
-    WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
-    OUTPUT_VARIABLE GIT_HASH
-    OUTPUT_STRIP_TRAILING_WHITESPACE)
+if (NOT ${USE_RPMBUILD})
+    execute_process(
+        COMMAND git log -1 --format=%h
+        WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
+        OUTPUT_VARIABLE GIT_HASH
+        OUTPUT_STRIP_TRAILING_WHITESPACE)
 
-execute_process(
-    COMMAND git log -1 --format=%ci
-    WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
-    OUTPUT_VARIABLE GIT_COMMIT_DATE OUTPUT_STRIP_TRAILING_WHITESPACE)
+    execute_process(
+        COMMAND git log -1 --format=%ci
+        WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
+        OUTPUT_VARIABLE GIT_COMMIT_DATE OUTPUT_STRIP_TRAILING_WHITESPACE)
+endif (NOT ${USE_RPMBUILD})
 
-message(STATUS "${CMLOC}OCPN_FLATPAK_CONFIG: ${OCPN_FLATPAK_CONFIG}, UNIX: ${UNIX}")
 if(OCPN_FLATPAK_CONFIG OR OCPN_FLATPAK_BUILD)
+    message(STATUS "${CMLOC}OCPN_FLATPAK_CONFIG: ${OCPN_FLATPAK_CONFIG}, UNIX: ${UNIX}")
     set(PKG_TARGET "flatpak")
     set(PKG_TARGET_VERSION "18.08") # As of flatpak/*yaml
 elseif(MINGW)
@@ -65,18 +67,31 @@ elseif(MSVC)
 elseif(APPLE)
     set(PKG_TARGET "darwin")
     execute_process(COMMAND "sw_vers" "-productVersion" OUTPUT_VARIABLE PKG_TARGET_VERSION)
+elseif(_wx_selected_config MATCHES "androideabi-qt-arm64")
+    set(PKG_TARGET "Android")
+    set(PKG_TARGET_VERSION 16)
+    set(QT_ANDROID ON)
+elseif(_wx_selected_config MATCHES "androideabi-qt-armhf")
+    set(PKG_TARGET "Android")
+    set(PKG_TARGET_VERSION 16)
+    set(QT_ANDROID ON)
 elseif(UNIX)
-    # Some linux dist:
-    execute_process(COMMAND "lsb_release" "-is" OUTPUT_VARIABLE PKG_TARGET)
-    execute_process(COMMAND "lsb_release" "-rs" OUTPUT_VARIABLE PKG_TARGET_VERSION)
-else()
+    find_program (LSB_RELEASE_COMMAND lsb_release)
+    if (EXISTS ${LSB_RELEASE_COMMAND})
+        execute_process(COMMAND "lsb_release" "-is" OUTPUT_VARIABLE PKG_TARGET)
+        execute_process(COMMAND "lsb_release" "-rs" OUTPUT_VARIABLE PKG_TARGET_VERSION)
+    else (${LSB_RELEASE_COMMAND})
+        message(FATAL_ERROR "${CMLOC}: FAILLED to find lsb_release command PATH")
+    endif (EXISTS ${LSB_RELEASE_COMMAND})
+else(UNIX)
     set(PKG_TARGET "unknown")
     set(PKG_TARGET_VERSION 1)
+    # why don't we abort cmake when we are here ? (dominig)
 endif()
 
-if(NOT WIN32)
+if(NOT WIN32 AND NOT QT_ANDROID)
     # default
-    set(ARCH "i386")
+     set(ARCH "i386")
     if(UNIX AND NOT APPLE)
 
         message(STATUS "${CMLOC}*** Will install to ${CMAKE_INSTALL_PREFIX}  ***")
@@ -98,7 +113,6 @@ if(NOT WIN32)
             else(CMAKE_SYSTEM_PROCESSOR MATCHES "arm*")
                 if(CMAKE_SIZEOF_VOID_P MATCHES "8")
                     set(ARCH "x86_64")
-                    set(ARCH_DEB "amd64")
                 else(CMAKE_SIZEOF_VOID_P MATCHES "8")
                     set(ARCH "i386")
                 endif(CMAKE_SIZEOF_VOID_P MATCHES "8")
@@ -138,7 +152,7 @@ if(NOT WIN32)
                 set(PACKAGE_DEPS "opencpn")
                 if(CMAKE_SIZEOF_VOID_P MATCHES "8")
                     set(ARCH "x86_64")
-                    set(LIB_INSTALL_DIR "lib")
+                    set(LIB_INSTALL_DIR "lib64")
                 else(CMAKE_SIZEOF_VOID_P MATCHES "8")
                     set(ARCH "i386")
                     set(LIB_INSTALL_DIR "lib")
@@ -156,9 +170,15 @@ if(NOT WIN32)
         set(ARCH "x86_64")
     endif(APPLE)
 
-else(NOT WIN32)
+else(NOT WIN32 AND NOT QT_ANDROID)
     set(ARCH "x86_64")
-endif(NOT WIN32)
+    if(_wx_selected_config MATCHES "androideabi-qt-arm64")
+        set(ARCH "arm64")
+    endif(_wx_selected_config MATCHES "androideabi-qt-arm64")
+    if(_wx_selected_config MATCHES "androideabi-qt-armhf")
+        set(ARCH "armhf")
+    endif(_wx_selected_config MATCHES "androideabi-qt-armhf")
+endif(NOT WIN32 AND NOT QT_ANDROID)
 
 message(STATUS "${CMLOC}ARCH: ${ARCH}")
 
@@ -170,11 +190,21 @@ set(PKG_TARGET_NVR ${PKG_TARGET}-${PKG_TARGET_VERSION})
 message(STATUS "${CMLOC}PluginSetup: PKG_TARGET: ${PKG_TARGET}, PKG_TARGET_VERSION: ${PKG_TARGET_VERSION}")
 
 if(DEFINED ENV{OCPN_TARGET})
-    set(PACKAGING_NAME "${PKG_NVR}-${PKG_TARGET}-${PKG_TARGET_VERSION}-$ENV{OCPN_TARGET}")
-    set(PACKAGING_NAME_XML "${PKG_NVR}-${PKG_TARGET}-${ARCH}-${PKG_TARGET_VERSION}-$ENV{OCPN_TARGET}")
-else(DEFINED ENV{OCPN_TARGET})
-    set(PACKAGING_NAME "${PKG_NVR}-${PKG_TARGET}-${PKG_TARGET_VERSION}")
-    set(PACKAGING_NAME_XML "${PKG_NVR}-${PKG_TARGET}-${ARCH}-${PKG_TARGET_VERSION}")
+    if(OCPN_FLATPAK_CONFIG OR OCPN_FLATPAK_BUILD OR MINGW)
+        set(PACKAGING_NAME "${PKG_NVR}-${PKG_TARGET}-${ARCH}-${PKG_TARGET_VERSION}-$ENV{OCPN_TARGET}")
+        set(PACKAGING_NAME_XML "${PKG_NVR}-${PKG_TARGET}-${ARCH}-${PKG_TARGET_VERSION}-$ENV{OCPN_TARGET}")
+    else(OCPN_FLATPAK_CONFIG OR OCPN_FLATPAK_BUILD OR MINGW)
+        set(PACKAGING_NAME "${PKG_NVR}-${PKG_TARGET}-${PKG_TARGET_VERSION}-$ENV{OCPN_TARGET}")
+        set(PACKAGING_NAME_XML "${PKG_NVR}-${PKG_TARGET}-${ARCH}-${PKG_TARGET_VERSION}-$ENV{OCPN_TARGET}")
+    endif(OCPN_FLATPAK_CONFIG OR OCPN_FLATPAK_BUILD OR MINGW)
+else()
+    if(OCPN_FLATPAK_CONFIG OR OCPN_FLATPAK_BUILD OR MINGW)
+        set(PACKAGING_NAME "${PKG_NVR}-${PKG_TARGET}-${ARCH}-${PKG_TARGET_VERSION}")
+        set(PACKAGING_NAME_XML "${PKG_NVR}-${PKG_TARGET}-${ARCH}-${PKG_TARGET_VERSION}")
+    else(OCPN_FLATPAK_CONFIG OR OCPN_FLATPAK_BUILD OR MINGW)
+        set(PACKAGING_NAME "${PKG_NVR}-${PKG_TARGET}-${PKG_TARGET_VERSION}")
+        set(PACKAGING_NAME_XML "${PKG_NVR}-${PKG_TARGET}-${ARCH}-${PKG_TARGET_VERSION}")
+    endif(OCPN_FLATPAK_CONFIG OR OCPN_FLATPAK_BUILD OR MINGW)
 endif(DEFINED ENV{OCPN_TARGET})
 message(STATUS "${CMLOC}PACKAGING_NAME: ${PACKAGING_NAME}")
 message(STATUS "${CMLOC}PACKAGING_NAME_XML: ${PACKAGING_NAME_XML}")

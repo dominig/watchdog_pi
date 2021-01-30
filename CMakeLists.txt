@@ -35,6 +35,9 @@
 set(CMLOC "CMakeLists: ")
 set(CMAKE_MODULE_PATH ${CMAKE_CURRENT_SOURCE_DIR}/cmake)
 
+# This option is only usefull for debuging cmake process
+option (CMAKE_VERBOSE_MAKEFILE "activate extra debug to list each cmake step" OFF)
+
 # define minimum cmake version
 cmake_minimum_required(VERSION 3.1.1)
 if(COMMAND cmake_policy)
@@ -103,6 +106,8 @@ set(BUNDLE_DATA FALSE)  #from wd
 set(CMAKE_MACOSX_RPATH "ON")  #from WD
 option(PLUGIN_USE_SVG "Use SVG graphics" ON)  
 set(CMAKE_CXX_STANDARD 11)
+option(USE_RPMBUILD "Build out of git tree as required by OBS (OpenSUSE) or Koji (Fedora, Centos, RedPesk)" OFF)
+
 # Prefer libGL.so to libOpenGL.so, see CMP0072
 # don't think this does anything
 #set(OpenGL_GL_PREFERENCE "LEGACY")
@@ -138,7 +143,7 @@ include("PluginSetup")
 ## ----- Modify section below if there are special requirements for the plugin ----- ##
 ##
 
-set(CMAKE_VERBOSE_MAKEFILE ON)
+option(CMAKE_VERBOSE_MAKEFILE ON)
 
 option(Plugin_CXX11 "Use c++11" OFF)
 
@@ -205,11 +210,13 @@ SET(HDRS
 
 add_definitions(-DPLUGIN_USE_SVG)
 
-if(APPLE)
+if(APPLEOR USE_RPMBUILD)
+# OBS from OpenSUSE nor Koji from Fedora allows to patch binary afterbuild
+
     option(PI_JSON_SCHEMA_VALIDATOR "Use JSON Schema validator" OFF)
-else(APPLE)
+else(APPLE OR USE_RPMBUILD)
     option(PI_JSON_SCHEMA_VALIDATOR "Use JSON Schema validator" ON)
-endif(APPLE)
+endif(APPLE OR USE_RPMBUILD)
 
 if(PI_JSON_SCHEMA_VALIDATOR)
     message(STATUS "${CMLOC}Using JSON Schema validation - warning this changes the 'flavour' of the executable and it may not be compatible with OpenCPN")
@@ -307,7 +314,10 @@ include("PluginJSON")  #not for wxfax  #commented out using libs
 ##=======================================
 include("PluginInstall")
 include("PluginLocalization")
-include("PluginPackage")
+if (NOT USE_RPMBUILD)
+# rpm-build provides its own package creation internal tool
+    include("PluginPackage")
+endif (NOT USE_RPMBUILD)
 ##=======================================
 ##
 ## ----- do not change section above - needed to configure build process ----- ##
