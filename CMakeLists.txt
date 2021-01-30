@@ -210,7 +210,7 @@ SET(HDRS
 
 add_definitions(-DPLUGIN_USE_SVG)
 
-if(APPLEOR USE_RPMBUILD)
+if(APPLE OR USE_RPMBUILD)
 # OBS from OpenSUSE nor Koji from Fedora allows to patch binary afterbuild
 
     option(PI_JSON_SCHEMA_VALIDATOR "Use JSON Schema validator" OFF)
